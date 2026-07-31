@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uzum · дашборд карточек</title>
+<style>
+:root {
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#6b6a65;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s1-soft:#86b6ef; --s1-deep:#1c5cab;
+  --good:#0ca30c; --good-text:#006300; --warn:#fab219; --serious:#ec835a;
+  --crit:#d03b3b; --crit-text:#b02525;      /* -text: для мелкого текста, AA на светлом */
+  --rank-a:#0a7a0a; --rank-b:#41761f; --rank-c:#fab219; --rank-d:#c0392b;
+  --chip:#f0efec;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#9a988f;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --s1:#3987e5; --s1-soft:#1c5cab; --s1-deep:#86b6ef;
+  --good:#0ca30c; --good-text:#3ec13e; --crit:#d03b3b; --crit-text:#f07a7a;
+  --rank-a:#0a7a0a; --rank-b:#41761f; --rank-c:#fab219; --rank-d:#c0392b;
+  --chip:#262624;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#9a988f;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --s1:#3987e5; --s1-soft:#1c5cab; --s1-deep:#86b6ef;
+    --good:#0ca30c; --good-text:#3ec13e; --crit:#d03b3b; --crit-text:#f07a7a;
+    --rank-a:#0a7a0a; --rank-b:#41761f; --rank-c:#fab219; --rank-d:#c0392b;
+    --chip:#262624;
+  }
+}
+@media print {                       /* печать всегда светлая, иначе бельё по белому */
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --page:#fff; --surface:#fff; --ink:#000; --ink2:#333; --muted:#555;
+    --grid:#ddd; --axis:#999; --border:rgba(0,0,0,.2); --chip:#f2f2f2;
+    --good-text:#006300; --crit-text:#a01f1f; }
+  .filters, #themeBtn, #drawer, #overlay { display:none !important; }
+  .tablewrap { max-height:none; overflow:visible; }
+  .card { break-inside:avoid; }
+}
+* { box-sizing:border-box; margin:0; }
+html,body { background:var(--page); color:var(--ink);
+  font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+a { color:var(--s1); text-decoration:none; }
+.wrap { max-width:1280px; margin:0 auto; padding:20px 24px 48px; }
+
+header.top { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding:6px 0 16px; }
+header.top h1 { font-size:20px; font-weight:650; }
+header.top .sub { color:var(--ink2); font-size:13px; }
+#themeBtn { margin-left:auto; border:1px solid var(--border); background:var(--surface);
+  color:var(--ink2); border-radius:8px; padding:5px 11px; cursor:pointer; font-size:13px; }
+
+.filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+.seg { display:inline-flex; background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; overflow:hidden; }
+.seg button { border:0; background:transparent; color:var(--ink2); padding:6px 13px;
+  cursor:pointer; font-size:13px; font-weight:500; }
+.seg button[aria-pressed="true"] { background:var(--s1); color:#fff; }
+.chips { display:flex; gap:8px; flex-wrap:wrap; }
+.chip { border:1px solid var(--border); background:var(--surface); color:var(--ink2);
+  border-radius:999px; padding:5px 13px; cursor:pointer; font-size:13px; }
+.chip[aria-pressed="true"] { border-color:var(--s1); color:var(--ink); box-shadow:inset 0 0 0 1px var(--s1); }
+.chip .n { font-weight:650; color:var(--ink); }
+/* 16px — иначе iOS Safari зумит страницу при фокусе в поле */
+#search { margin-left:auto; border:1px solid var(--border); background:var(--surface);
+  color:var(--ink); border-radius:9px; padding:6px 12px; font-size:16px; width:210px; }
+
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+.tile { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:13px 15px 11px; }
+.tile .lbl { color:var(--ink2); font-size:12.5px; margin-bottom:4px; }
+/* nowrap + clamp: «6,69 млн сум» не должно переноситься на вторую строку и ломать
+   высоту плитки — при узкой колонке кегль ужимается, а не рвётся перенос */
+.tile .val { font-size:clamp(18px,2.2vw,24px); font-weight:600; letter-spacing:-.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tile.hero .val { font-size:clamp(20px,2.4vw,28px); }
+.tile .delta { font-size:12.5px; margin-top:2px; color:var(--ink2); }
+.tile .delta.up { color:var(--good-text); }
+.tile .delta.down { color:var(--ink2); }
+
+.card { background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:16px 18px; margin-bottom:16px; }
+.card h2 { font-size:14.5px; font-weight:650; margin-bottom:2px; }
+.card .note { color:var(--muted); font-size:12px; }
+.chart-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+.chart-head .seg { margin-left:auto; }
+#trendWrap { position:relative; }
+#trendSvg { display:block; width:100%; }
+
+/* max-height включает полосу заголовка: sticky th работает только внутри
+   прокручиваемого предка, а не когда прокручивается сама страница */
+.tablewrap { overflow:auto; max-height:min(78vh, 900px); overscroll-behavior:contain; }
+table.main { border-collapse:collapse; width:100%; font-size:13px; }
+table.main th { text-align:right; color:var(--ink2); font-weight:550; font-size:12px;
+  padding:7px 9px; border-bottom:1px solid var(--axis); white-space:nowrap; cursor:pointer;
+  user-select:none; position:sticky; top:0; background:var(--surface); }
+table.main th.l, table.main td.l { text-align:left; }
+table.main th .arr { color:var(--s1); }
+table.main td { padding:7px 9px; border-bottom:1px solid var(--grid); text-align:right;
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+table.main tbody tr { cursor:pointer; }
+table.main tbody tr:hover { background:var(--chip); }
+:is(table.main tbody tr, th, .chip, .seg button, button, input):focus-visible {
+  outline:2px solid var(--s1); outline-offset:-2px; }
+table.main tbody tr:focus-visible td { background:var(--chip); }
+/* колонка «Сигнал» всегда видна: липнет к правому краю при горизонтальном скролле */
+table.main th:last-child, table.main td:last-child {
+  position:sticky; right:0; background:var(--surface);
+  box-shadow:inset 1px 0 0 var(--grid); }
+table.main th:last-child { z-index:2; }
+table.main tbody tr:hover td:last-child, table.main tbody tr:focus td:last-child {
+  background:var(--chip); }
+.tname { max-width:230px; overflow:hidden; text-overflow:ellipsis; font-weight:550; }
+.tcat { color:var(--muted); font-size:11.5px; }
+.rank { display:inline-block; min-width:20px; text-align:center; border-radius:6px;
+  font-size:11.5px; font-weight:650; padding:2px 5px; background:var(--chip); color:var(--ink2); }
+.rank.A { background:var(--rank-a); color:#fff; } .rank.B { background:var(--rank-b); color:#fff; }
+.rank.C { background:var(--rank-c); color:#3a2b00; } .rank.D { background:var(--rank-d); color:#fff; }
+.sig { font-size:12px; white-space:normal; max-width:250px; display:inline-block; text-align:left; }
+.sig.crit { color:var(--crit-text); font-weight:550; }
+.sig.warn { color:inherit; font-weight:550; }
+.sig.good { color:var(--good-text); font-weight:400; }
+/* дельты — нейтральнее статусов: направление, а не тревога */
+.dneg { color:var(--ink2); } .dpos { color:var(--good-text); }
+.spark { vertical-align:middle; }
+
+#tooltip { position:fixed; z-index:50; pointer-events:none; background:var(--surface);
+  border:1px solid var(--border); border-radius:9px; padding:8px 11px; font-size:12.5px;
+  box-shadow:0 4px 16px rgba(0,0,0,.13); display:none; min-width:130px; }
+#tooltip .tt-title { color:var(--ink2); margin-bottom:3px; }
+#tooltip .tt-val { font-size:15px; font-weight:650; }
+#tooltip .tt-sub { color:var(--muted); font-size:11.5px; margin-top:2px; }
+
+#overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; z-index:60; }
+/* dvh: на iOS Safari 100vh уводит низ панели под тулбар */
+#drawer { position:fixed; top:0; right:-560px; width:540px; max-width:96vw;
+  height:100vh; height:100dvh; overscroll-behavior:contain;
+  background:var(--surface); border-left:1px solid var(--border); z-index:61;
+  transition:right .22s ease; overflow-y:auto; padding:20px 22px 40px; }
+@media (prefers-reduced-motion: reduce) { #drawer { transition:none; } }
+#drawer.open { right:0; }
+#drawer h3 { font-size:16px; font-weight:650; margin-bottom:2px; padding-right:36px; }
+#drawer .dcat { color:var(--muted); font-size:12px; margin-bottom:12px; }
+#dClose { position:absolute; top:14px; right:14px; border:1px solid var(--border);
+  background:transparent; color:var(--ink2); border-radius:8px; width:30px; height:30px;
+  cursor:pointer; font-size:15px; }
+.dgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:9px; margin-bottom:16px; }
+.dcell { background:var(--chip); border-radius:9px; padding:8px 10px; }
+.dcell .k { color:var(--ink2); font-size:11px; }
+.dcell .v { font-size:15px; font-weight:600; margin-top:1px; }
+#drawer h4 { font-size:13px; font-weight:650; margin:16px 0 6px; }
+#drawer .dsig { border-radius:9px; padding:9px 12px; font-size:13px; margin-bottom:14px;
+  background:var(--chip); }
+table.mini { border-collapse:collapse; width:100%; font-size:12px; }
+table.mini th { text-align:right; color:var(--ink2); font-weight:550; padding:4px 7px;
+  border-bottom:1px solid var(--axis); }
+table.mini td { text-align:right; padding:4px 7px; border-bottom:1px solid var(--grid);
+  font-variant-numeric:tabular-nums; }
+table.mini th:first-child, table.mini td:first-child { text-align:left; }
+.empty { color:var(--muted); font-size:12.5px; padding:6px 0; }
+#trendTable { margin-top:10px; }
+#trendTable summary { color:var(--ink2); font-size:12.5px; cursor:pointer; }
+.tw-mini { max-height:260px; margin-top:8px; }
+.tw-mini th { position:sticky; top:0; background:var(--surface); }
+
+/* ---- очередь действий ---- */
+.acts { display:flex; flex-direction:column; gap:1px; background:var(--grid); border-radius:10px;
+  overflow:hidden; border:1px solid var(--border); }
+.act { display:grid; grid-template-columns:26px minmax(150px,1.1fr) minmax(180px,1.6fr) 118px;
+  gap:12px; align-items:start; background:var(--surface); padding:10px 13px; cursor:pointer; }
+.act:hover, .act:focus-visible { background:var(--chip); }
+.act .num { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; padding-top:2px; }
+.act .who { min-width:0; }
+.act .who .nm { font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.act .who .dg { color:var(--ink2); font-size:12px; margin-top:2px; }
+.act .do { font-size:12.5px; color:var(--ink); }
+.act .do .meta { color:var(--muted); font-size:11.5px; margin-top:3px; }
+.act .prize { text-align:right; font-variant-numeric:tabular-nums; }
+.act .prize .p { font-weight:650; font-size:13.5px; white-space:nowrap; }
+.act .prize .u { color:var(--muted); font-size:11.5px; }
+.act.blocker { box-shadow:inset 3px 0 0 var(--crit); }
+.act.blocker .dg { color:var(--crit-text); font-weight:550; }
+.badge { display:inline-block; border-radius:5px; padding:1px 6px; font-size:11px;
+  background:var(--chip); color:var(--ink2); margin-right:5px; }
+.badge.hi { background:var(--good); color:#fff; } .badge.mid { background:var(--warn); color:#3a2b00; }
+.more { margin-top:10px; border:1px solid var(--border); background:var(--surface); color:var(--ink2);
+  border-radius:8px; padding:6px 13px; cursor:pointer; font-size:12.5px; }
+.sumline { display:flex; gap:16px; flex-wrap:wrap; color:var(--ink2); font-size:12.5px; margin:2px 0 12px; }
+.sumline b { color:var(--ink); font-weight:650; }
+.funnel { display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:9px;
+  margin:6px 0 14px; }
+.fstep { background:var(--chip); border-radius:9px; padding:9px 11px; }
+.fstep .k { color:var(--ink2); font-size:11px; } .fstep .v { font-size:16px; font-weight:650; margin-top:1px; }
+.fstep .s { color:var(--muted); font-size:11px; margin-top:2px; }
+.fstep.gap { box-shadow:inset 0 0 0 1px var(--warn); }
+footer.notes { color:var(--muted); font-size:12px; line-height:1.6; margin-top:8px; }
+@media (max-width:720px) {
+  .wrap { padding:14px 12px 40px; }
+  #search { width:100%; margin-left:0; }
+  .tile .val { font-size:20px; } .tile.hero .val { font-size:26px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Uzum · UytMarket — карточки</h1>
+    <span class="sub" id="genInfo"></span>
+    <button id="themeBtn" type="button">Тема</button>
+  </header>
+
+  <div class="filters" id="filterRow">
+    <div class="seg" id="periodSeg" role="group" aria-label="Период">
+      <button data-p="7" aria-pressed="true" type="button">7 дней</button>
+      <button data-p="14" aria-pressed="false" type="button">14 дней</button>
+      <button data-p="30" aria-pressed="false" type="button">30 дней</button>
+    </div>
+    <div class="chips" id="sigChips"></div>
+    <input id="search" type="search" placeholder="Поиск товара…" aria-label="Поиск товара">
+  </div>
+
+  <section class="kpis" id="kpis" aria-label="Ключевые показатели"></section>
+
+  <section class="card" id="actCard">
+    <h2>Что делать</h2>
+    <div class="note" id="actNote" style="margin-bottom:8px"></div>
+    <div class="funnel" id="funnelBox"></div>
+    <div class="acts" id="actList"></div>
+    <button class="more" id="actMore" type="button" hidden>Показать все</button>
+  </section>
+
+  <section class="card">
+    <div class="chart-head">
+      <div>
+        <h2 id="trendTitle">Продажи по дням</h2>
+        <div class="note" id="trendNote"></div>
+      </div>
+      <div class="seg" id="metricSeg" role="group" aria-label="Метрика">
+        <button data-m="units" aria-pressed="true" type="button">Шт</button>
+        <button data-m="revenue" aria-pressed="false" type="button">Выручка</button>
+        <button data-m="profit" aria-pressed="false" type="button">Прибыль</button>
+      </div>
+    </div>
+    <div id="trendWrap"><svg id="trendSvg" role="img" aria-label="Продажи по дням"></svg></div>
+    <details id="trendTable">
+      <summary>Показать значения таблицей</summary>
+      <div class="tablewrap tw-mini"><table class="mini" id="trendTbl"></table></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Карточки</h2>
+    <div class="note" id="tblNote" style="margin-bottom:8px"></div>
+    <div class="tablewrap"><table class="main" id="tbl">
+      <thead><tr id="tblHead"></tr></thead>
+      <tbody id="tblBody"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="chgCard">
+    <h2>Правки и эффект</h2>
+    <div class="note" id="chgNote" style="margin-bottom:8px"></div>
+    <div class="tablewrap tw-mini"><table class="mini" id="chgTbl"></table></div>
+    <div id="chgStats"></div>
+  </section>
+
+  <footer class="notes">
+    Ежедневное обновление 07:10 KST из Uzum Seller API (ранг, продажи, остатки, цены, просмотры,
+    конверсия). Просмотры в API — накопительный счётчик, поэтому трафик за период считается как
+    прирост между снимками лога; клики API отдаёт пустыми, поэтому CTR не показывается.
+    «Приз» — размер разрыва до медианы портфеля при текущем трафике, а не прогноз эффекта правки:
+    сколько даёт конкретная правка, накапливается в блоке «Правки и эффект».
+    Позиции по поисковым ключам и данные по конкурентам не автоматизируются (витрина за капчей,
+    у ZoomSelling нет API) — еженедельный ручной срез. Отменённые заказы в продажи не входят.
+  </footer>
+</div>
+
+<div id="tooltip" role="status"></div>
+<div id="overlay"></div>
+<aside id="drawer" aria-label="Детали карточки">
+  <button id="dClose" type="button" aria-label="Закрыть">✕</button>
+  <div id="dBody"></div>
+</aside>
+
+<script>
+const DATA = {"shopTitle":"магазин 124901","today":"2026-07-31","generated":"31.07.2026 18:23","shops":["124901"],"cards":[{"pid":"3067167","shop":"124901","title":"CARPETFISH","category":"Ostona gilamlari","rank":"D","price":89000,"stock":6,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"ON_MODERATION","skus":6,"clicks":null,"commission":22.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9ctc1i1146g73htil60/t_product_80_low.jpg"},{"pid":"3090040","shop":"124901","title":"PARTYBRACELET","category":"Bilaguzuklar","rank":"D","price":49000,"stock":12,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"ON_MODERATION","skus":2,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9g8mtq1146g73hv2u90/t_product_80_low.jpg"},{"pid":"3090271","shop":"124901","title":"DAILYBRACELET","category":"Bilaguzuklar","rank":"D","price":49000,"stock":2,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"ON_MODERATION","skus":1,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9g7lf21146g73hv27f0/t_product_80_low.jpg"},{"pid":"3090481","shop":"124901","title":"BUGEARRINGS","category":"Ziraklar","rank":"D","price":39000,"stock":3,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"MODERATED","skus":1,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9g8rf21146g73hv32j0/t_product_80_low.jpg"},{"pid":"3090546","shop":"124901","title":"WINEEARRINGS","category":"Ziraklar","rank":"D","price":29900,"stock":3,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"MODERATED","skus":1,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9g91srsv8vsdeubhid0/t_product_80_low.jpg"},{"pid":"3090856","shop":"124901","title":"ASSORTEARRINGS","category":"Ziraklar","rank":"D","price":21000,"stock":22,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"MODERATED","skus":6,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9g9ios9g1ku9j5lkc3g/t_product_80_low.jpg"},{"pid":"3091096","shop":"124901","title":"NEOEARRINGS","category":"Ziraklar","rank":"D","price":38000,"stock":8,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"MODERATED","skus":2,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9gab549g1ku9j5ll3e0/t_product_80_low.jpg"},{"pid":"3091264","shop":"124901","title":"GREENEARRINGS","category":"Ziraklar","rank":"D","price":45000,"stock":7,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"MODERATED","skus":2,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9gahaq1146g73hv4gf0/t_product_80_low.jpg"},{"pid":"3091382","shop":"124901","title":"ARTEARRINGS","category":"Ziraklar","rank":"D","price":49000,"stock":10,"sold":0,"ret_pct":0.0,"rating":"0.0","reviews":0,"viewers":0,"conv":null,"roi":"-100.0","status":"IN_STOCK","moderation":"MODERATED","skus":2,"clicks":null,"commission":25.0,"avgdsales":null,"turnover":null,"filters_ok":1,"all_filters":0,"promo_in":0,"promo_rec":0,"promo_price":null,"promo_name":"","illiquid":0,"image":"https://images.uzum.uz/d9gavak9g1ku9j5llnv0/t_product_80_low.jpg"}],"sales":[],"log":[{"date":"2026-07-29","pid":"3067167","rank":"D","price":89000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3090040","rank":"D","price":49000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3090271","rank":"D","price":49000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3090481","rank":"D","price":39000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3090546","rank":"D","price":29900,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3090856","rank":"D","price":21000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3091096","rank":"D","price":38000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3091264","rank":"D","price":45000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-29","pid":"3091382","rank":"D","price":49000,"stock":0,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3067167","rank":"D","price":89000,"stock":6,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3090040","rank":"D","price":49000,"stock":12,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3090271","rank":"D","price":49000,"stock":2,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3090481","rank":"D","price":39000,"stock":3,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3090546","rank":"D","price":29900,"stock":3,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3090856","rank":"D","price":21000,"stock":22,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3091096","rank":"D","price":38000,"stock":8,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3091264","rank":"D","price":45000,"stock":7,"sold":0,"viewers":0,"conv":null},{"date":"2026-07-31","pid":"3091382","rank":"D","price":49000,"stock":10,"sold":0,"viewers":0,"conv":null}],"keys":[],"an":{"periods":{"7":{"cards":{"3067167":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090040":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090271":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090481":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090546":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090856":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091096":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091264":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091382":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"}},"bench":{"portfolio":null,"n":0,"byCategory":{},"catCounts":{}},"tasks":[{"pid":"3091382","title":"ARTEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090856","title":"ASSORTEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090481","title":"BUGEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3067167","title":"CARPETFISH","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3067167","title":"CARPETFISH","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3090271","title":"DAILYBRACELET","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090271","title":"DAILYBRACELET","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3091264","title":"GREENEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3091096","title":"NEOEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090040","title":"PARTYBRACELET","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090040","title":"PARTYBRACELET","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3090546","title":"WINEEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false}],"windowDays":0,"mode":"lifetime","period":7},"14":{"cards":{"3067167":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090040":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090271":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090481":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090546":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090856":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091096":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091264":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091382":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"}},"bench":{"portfolio":null,"n":0,"byCategory":{},"catCounts":{}},"tasks":[{"pid":"3091382","title":"ARTEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090856","title":"ASSORTEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090481","title":"BUGEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3067167","title":"CARPETFISH","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3067167","title":"CARPETFISH","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3090271","title":"DAILYBRACELET","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090271","title":"DAILYBRACELET","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3091264","title":"GREENEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3091096","title":"NEOEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090040","title":"PARTYBRACELET","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090040","title":"PARTYBRACELET","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3090546","title":"WINEEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false}],"windowDays":0,"mode":"lifetime","period":14},"30":{"cards":{"3067167":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090040":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090271":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090481":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090546":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3090856":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091096":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091264":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"},"3091382":{"views":null,"viewsEval":0,"windowDays":0,"trafficFrom":"2026-07-29","conv":null,"convSrc":"lifetime","rate":0.0,"stockDays":null,"u":0,"r":0,"p":0,"o":0,"c":0,"bench":null,"benchSrc":null,"code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая"}},"bench":{"portfolio":null,"n":0,"byCategory":{},"catCounts":{}},"tasks":[{"pid":"3091382","title":"ARTEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090856","title":"ASSORTEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090481","title":"BUGEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3067167","title":"CARPETFISH","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3067167","title":"CARPETFISH","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3090271","title":"DAILYBRACELET","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090271","title":"DAILYBRACELET","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3091264","title":"GREENEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3091096","title":"NEOEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090040","title":"PARTYBRACELET","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false},{"pid":"3090040","title":"PARTYBRACELET","blocker":false,"code":"recheck","diag":"идёт перепроверка модерации (ON_MODERATION)","action":"продаж не блокирует; проверить итог — правки могли не примениться","effort":"S","prizeMoney":null,"prizeUnits":null,"conf":"—"},{"pid":"3090546","title":"WINEEARRINGS","code":"traffic","diag":"трафика почти нет (0 просмотров всего)","action":"ключи в заголовок и характеристики, участие в акции, реклама","effort":"M","prizeUnits":null,"prizeMoney":null,"conf":"низкая","blocker":false}],"windowDays":0,"mode":"lifetime","period":30}},"changes":[],"changeStats":[]}};
+
+/* ---------- state ---------- */
+const S = { period:7, sig:'all', q:'', sort:{key:'rev', dir:-1}, metric:'units', actAll:false };
+
+/* Аналитика (воронка, приз, очередь действий, эффект правок) приходит ПОСЧИТАННОЙ из
+   analytics.py — здесь её только показывают. Никаких повторных расчётов: это единственный
+   способ гарантировать, что страница не разойдётся с xlsx и Google Sheets. */
+const AN = DATA.an || null;
+const curP = () => (AN && AN.periods[String(S.period)]) || null;
+const anCard = pid => { const p = curP(); return (p && p.cards[pid]) || null; };
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s);
+
+/* ---------- theme ---------- */
+(function initTheme(){
+  const saved = localStorage.getItem('uzumDashTheme');
+  if (saved) document.documentElement.dataset.theme = saved;
+  $('themeBtn').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme ||
+      (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('uzumDashTheme', next);
+    renderAll();
+  });
+})();
+
+/* ---------- data prep ---------- */
+const anchor = DATA.today;                       // дата снимка — якорь всех окон
+const D = s => new Date(s + 'T12:00:00');           // полдень: без сдвигов UTC/DST
+const iso = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') +
+  '-' + String(d.getDate()).padStart(2,'0');        // локальная дата, НЕ toISOString (UTC)
+const addDays = (s, n) => { const d = D(s); d.setDate(d.getDate() + n); return iso(d); };
+
+const sales = {};                                // pid -> { date -> {u,r,p,o,c} }
+let minDate = anchor;
+for (const r of DATA.sales) {
+  (sales[r.pid] ||= {})[r.date] = r;
+  if (r.date < minDate) minDate = r.date;
+}
+const availDays = Math.round((D(anchor) - D(minDate)) / 864e5) + 1;
+
+const logByPid = {};                             // pid -> [ {date,...} ] (по возрастанию даты)
+for (const r of DATA.log) (logByPid[r.pid] ||= []).push(r);
+const keysByPid = {};
+for (const r of DATA.keys) (keysByPid[r.pid] ||= []).push(r);
+
+function sumWin(pid, from, to) {                 // сумма за [from..to] включительно
+  const byDate = sales[pid] || {};
+  const acc = {u:0, r:0, p:0, o:0, c:0};
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const v = byDate[d];
+    if (v) { acc.u += v.u; acc.r += v.r; acc.p += v.p; acc.o += v.o; acc.c += v.c; }
+  }
+  return acc;
+}
+
+function cardAgg(c, P) {
+  const cur  = sumWin(c.pid, addDays(anchor, -(P - 1)), anchor);
+  const prevOk = availDays >= 2 * P;
+  const prev = prevOk ? sumWin(c.pid, addDays(anchor, -(2*P - 1)), addDays(anchor, -P)) : null;
+  const L = Math.min(2 * P, availDays);
+  const rate = sumWin(c.pid, addDays(anchor, -(L - 1)), anchor).u / L;
+  const stockDaysRaw = rate > 0 ? c.stock / rate : null;   // порог считаем по сырому
+  const stockDays = stockDaysRaw === null ? null : Math.round(stockDaysRaw);
+  return { cur, prev, stockDaysRaw, stockDays,
+           u2p: sumWin(c.pid, addDays(anchor, -(2*P - 1)), anchor).u };
+}
+
+/* Сигнал — зеркало Python signal() в uzum_portfolio.py: при P=7 формулировки, пороги
+   и порядок правил совпадают дословно, чтобы дашборд не расходился с xlsx/Sheets.
+   Менять только синхронно с Python. */
+function signal(c, a) {
+  const { cur, prev, stockDaysRaw, stockDays, u2p } = a;
+  const P2 = 2 * S.period;                       // окно «нет продаж»: 14д при P=7
+  const unit = S.period === 7 ? ' шт/нед' : ' шт/' + S.period + 'д';
+  if (c.moderation !== 'MODERATED' && c.status !== 'IN_STOCK')
+    return { cls:'crit', icon:'⛔', txt:'не в продаже, модерация: ' + c.moderation, bucket:'act' };
+  if (c.status !== 'IN_STOCK')      return { cls:'crit', icon:'⛔', txt:'не в продаже (' + c.status + ')', bucket:'act' };
+  if (c.stock === 0)                return { cls:'crit', icon:'🔴', txt:'остаток 0 — пополнить', bucket:'act' };
+  if (u2p === 0 && c.viewers < 100) return { cls:'crit', icon:'🔴', txt:'мало трафика и нет продаж ' + P2 + 'д — ключи/SEO', bucket:'act' };
+  if (u2p === 0)                    return { cls:'crit', icon:'🔴', txt:'трафик есть, продаж нет ' + P2 + 'д — цена/фото/отзывы', bucket:'act' };
+  if (stockDaysRaw !== null && stockDaysRaw < 14)   // порог по сырому значению, как в Python
+    return { cls:'warn', icon:'🟡', txt:'остатка ~' + stockDays + ' дн — дозаказ', bucket:'warn' };
+  if (c.viewers >= 100 && c.conv !== null && c.conv < 1)
+    return { cls:'warn', icon:'🟡', txt:'конверсия <1% при трафике — цена/фото', bucket:'warn' };
+  if (prev && cur.u < prev.u * 0.7 && prev.u >= 3)
+    return { cls:'warn', icon:'🟡', txt:'продажи падают (' + prev.u + '→' + cur.u + unit + ')', bucket:'warn' };
+  if (prev && cur.u > prev.u)
+    return { cls:'good', icon:'🟢', txt:'рост (' + prev.u + '→' + cur.u + unit + ')', bucket:'ok' };
+  return { cls:'good', icon:'🟢', txt:'стабильно', bucket:'ok' };
+}
+
+/* ---------- formatting ---------- */
+const nf = new Intl.NumberFormat('ru-RU');
+const MINUS = '−';                                   // единый минус во всём дашборде
+const sign = s => String(s).replace(/-/g, MINUS);
+const fmtI = v => sign(nf.format(Math.round(v)));
+function fmtMoney(v) {
+  const a = Math.abs(v);
+  if (a >= 1e9) return sign((v/1e9).toLocaleString('ru-RU', {maximumFractionDigits:2})) + ' млрд';
+  if (a >= 1e6) return sign((v/1e6).toLocaleString('ru-RU', {maximumFractionDigits:2})) + ' млн';
+  if (a >= 1e4 && a < 1e6)                                 // без «1 000 тыс» — это уже млн
+    return sign((v/1e3).toLocaleString('ru-RU', {maximumFractionDigits:0})) + ' тыс';
+  return fmtI(v);
+}
+const fmtDate = s => { const d = D(s);
+  return String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0'); };
+const el = (tag, cls, text) => { const e = document.createElement(tag);
+  if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+/* ---------- KPIs ---------- */
+function renderKpis(rows) {
+  const k = $('kpis'); k.textContent = '';
+  const sum = f => rows.reduce((s, r) => s + f(r), 0);
+  const rev = sum(r => r.a.cur.r), prof = sum(r => r.a.cur.p), units = sum(r => r.a.cur.u);
+  const prevOk = availDays >= 2 * S.period;
+  const pRev = prevOk ? sum(r => r.a.prev.r) : null, pU = prevOk ? sum(r => r.a.prev.u) : null;
+  const act = rows.filter(r => r.sig.bucket === 'act').length;
+  const withSales = rows.filter(r => r.a.cur.u > 0).length;
+  const pProf = prevOk ? sum(r => r.a.prev.p) : null;
+  const tiles = [
+    // единица — в подпись: «6,84 млн сум» в крупном кегле не помещается в плитку и обрезается
+    { lbl:'Выручка за ' + S.period + ' дн, сум', val: fmtMoney(rev), d: pRev, cur: rev, money:true, hero:true },
+    { lbl:'Прибыль за ' + S.period + ' дн, сум', val: fmtMoney(prof), d: pProf, cur: prof, money:true },
+    { lbl:'Продажи, шт', val: fmtI(units), d: pU, cur: units },
+    { lbl:'Карточек с продажами', val: withSales + ' из ' + rows.length },
+    { lbl:'Требуют действия', val: String(act) },
+  ];
+  const P = curP();
+  if (P) {
+    const vis = new Set(rows.map(r => r.c.pid));
+    const prize = P.tasks.filter(t => vis.has(t.pid)).reduce((s, t) => s + (t.prizeMoney || 0), 0);
+    tiles.push({ lbl:'Приз, сум/нед', val: fmtMoney(prize) });
+  }
+  for (const t of tiles) {
+    const tile = el('div', 'tile' + (t.hero ? ' hero' : ''));
+    tile.appendChild(el('div', 'lbl', t.lbl));
+    tile.appendChild(el('div', 'val', t.val));
+    if (t.d !== undefined) {
+      const dl = el('div', 'delta');
+      if (t.d === null) dl.textContent = 'пред. период: н/д (истории < ' + (2*S.period) + ' дн)';
+      else {
+        const diff = t.cur - t.d;
+        dl.textContent = (diff >= 0 ? '+' : MINUS) +
+          (t.money ? fmtMoney(Math.abs(diff)) : fmtI(Math.abs(diff))) +
+          ' к пред. ' + S.period + ' дн';
+        dl.classList.add(diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
+      }
+      tile.appendChild(dl);
+    }
+    k.appendChild(tile);
+  }
+}
+
+/* ---------- signal chips ---------- */
+function renderChips(rowsAll) {
+  const counts = { all: rowsAll.length, act:0, warn:0, ok:0 };
+  for (const r of rowsAll) counts[r.sig.bucket]++;
+  const defs = [ ['all','Все'], ['act','🔴 Действовать'], ['warn','🟡 Внимание'], ['ok','🟢 Ок'] ];
+  const box = $('sigChips'); box.textContent = '';
+  for (const [key, lbl] of defs) {
+    const b = el('button', 'chip'); b.type = 'button';
+    b.setAttribute('aria-pressed', String(S.sig === key));
+    b.appendChild(document.createTextNode(lbl + ' '));
+    b.appendChild(el('span', 'n', String(counts[key])));
+    b.addEventListener('click', () => { S.sig = key; renderAll(); });
+    box.appendChild(b);
+  }
+}
+
+/* ---------- воронка портфеля ---------- */
+const CONF_CLS = { 'высокая':'hi', 'средняя':'mid' };
+function renderFunnel(rows) {
+  const box = $('funnelBox'); box.textContent = '';
+  const P = curP(); if (!P) return;
+  const vis = new Set(rows.map(r => r.c.pid));
+  const ms = rows.map(r => P.cards[r.c.pid]).filter(Boolean);
+  const period = P.mode === 'period';
+  const views = period ? ms.reduce((s,m) => s + (m.views || 0), 0) : ms.reduce((s,m) => s + (m.viewsEval || 0), 0);
+  const units = ms.reduce((s,m) => s + m.u, 0), orders = ms.reduce((s,m) => s + m.o, 0);
+  const conv = views > 0 ? units / views * 100 : null;
+  const bench = P.bench.portfolio;
+  const below = ms.filter(m => m.conv !== null && m.bench && m.conv < m.bench).length;
+  const prize = P.tasks.filter(t => vis.has(t.pid)).reduce((s,t) => s + (t.prizeMoney || 0), 0);
+  const win = period ? ('за ' + P.windowDays + ' дн') : 'за всё время';
+  const steps = [
+    { k:'Просмотры ' + win, v: fmtI(views), s: period ? 'прирост счётчика между снимками' : 'накопительный счётчик API' },
+    { k:'Заказы',    v: fmtI(orders), s: fmtI(units) + ' шт' },
+    { k:'Конверсия', v: conv === null ? '—' : conv.toFixed(2), s:'шт на 100 просмотров' },
+    { k:'Норма (медиана)', v: bench === null ? '—' : bench.toFixed(2),
+      s: bench === null ? 'мало данных' : 'по ' + P.bench.n + ' карточкам' },
+    { k:'Ниже нормы', v: String(below), s:'из ' + ms.length + ' карточек', gap: below > 0 },
+    { k:'Приз', v: fmtMoney(prize), s:'сум/нед — размер разрыва' },
+  ];
+  for (const st of steps) {
+    const d = el('div', 'fstep' + (st.gap ? ' gap' : ''));
+    d.appendChild(el('div','k',st.k)); d.appendChild(el('div','v',st.v));
+    d.appendChild(el('div','s',st.s));
+    box.appendChild(d);
+  }
+  $('actNote').textContent = period
+    ? ('Трафик и конверсия — за фактическое окно ' + P.windowDays + ' дн (столько накопилось лога). ' +
+       'Приз — недобор до медианы при текущем трафике, не прогноз эффекта правки.')
+    : ('Лога пока меньше ' + Math.min(S.period, 5) + ' дн, поэтому конверсия взята накопительная (за всю жизнь карточки) — ' +
+       'она инертна и разрывы занижены. Окно за период включится само, как накопятся снимки.');
+}
+
+/* ---------- очередь действий ---------- */
+const EFFORT_TXT = { S:'быстро', M:'средне', L:'долго' };
+function renderActions(rows) {
+  const list = $('actList'); list.textContent = '';
+  const P = curP();
+  if (!P) { list.appendChild(el('div','empty','Аналитика не собрана — обновите дашборд.')); return; }
+  const vis = new Set(rows.map(r => r.c.pid));
+  const tasks = P.tasks.filter(t => vis.has(t.pid));
+  const rowByPid = {}; for (const r of rows) rowByPid[r.c.pid] = r;
+  const LIMIT = 8;
+  const shown = S.actAll ? tasks : tasks.slice(0, LIMIT);
+  if (!shown.length) { list.appendChild(el('div','empty','Задач нет — по видимым карточкам всё в норме.')); }
+  shown.forEach((t, i) => {
+    const a = el('div', 'act' + (t.blocker ? ' blocker' : ''));
+    a.tabIndex = 0;
+    const open = () => { const r = rowByPid[t.pid]; if (r) openDrawer(r); };
+    a.addEventListener('click', open);
+    a.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+    a.appendChild(el('div','num',String(i + 1)));
+    const who = el('div','who');
+    who.appendChild(el('div','nm', t.title || t.pid));
+    who.appendChild(el('div','dg', t.diag));
+    a.appendChild(who);
+    const doo = el('div','do', t.action);
+    const meta = el('div','meta');
+    if (t.conf && t.conf !== '—') {
+      const b = el('span','badge ' + (CONF_CLS[t.conf] || ''), 'уверенность: ' + t.conf);
+      meta.appendChild(b);
+    }
+    meta.appendChild(el('span','badge', EFFORT_TXT[t.effort] || t.effort));
+    doo.appendChild(meta);
+    a.appendChild(doo);
+    const pr = el('div','prize');
+    pr.appendChild(el('div','p', t.prizeMoney === null || t.prizeMoney === undefined
+      ? '—' : fmtMoney(t.prizeMoney) + ' сум'));
+    pr.appendChild(el('div','u', t.prizeUnits === null || t.prizeUnits === undefined
+      ? 'приз не считаем' : '≈ ' + t.prizeUnits.toFixed(1) + ' шт/нед'));
+    a.appendChild(pr);
+    list.appendChild(a);
+  });
+  const more = $('actMore');
+  more.hidden = tasks.length <= LIMIT;
+  more.textContent = S.actAll ? 'Свернуть' : 'Показать все (' + tasks.length + ')';
+}
+
+/* ---------- журнал правок ---------- */
+function renderChanges() {
+  const t = $('chgTbl'); t.textContent = '';
+  const st = $('chgStats'); st.textContent = '';
+  const changes = (AN && AN.changes) || [];
+  $('chgNote').textContent = 'Что меняли в карточках и что из этого вышло: шт/день за N дней до правки ' +
+    'против N дней после. Заполняется вручную в changes.csv — отсюда со временем и берутся ' +
+    'настоящие проценты «сколько даёт фото / цена / ключи».';
+  if (!changes.length) {
+    t.appendChild(el('tbody')).appendChild(el('tr')).appendChild(
+      el('td','', 'Журнал пуст. Внесите строку в changes.csv (дата, ID, тип правки, что изменили) — ' +
+                  'эффект посчитается автоматически на 7, 14 и 30 день.'));
+    return;
+  }
+  const thead = el('thead'), trh = el('tr');
+  for (const h of ['Дата','Товар','Тип','Что изменили','T+7','T+14','T+30','Ранг'])
+    trh.appendChild(el('th','',h));
+  thead.appendChild(trh); t.appendChild(thead);
+  const tb = el('tbody');
+  for (const ch of changes) {
+    const tr = el('tr');
+    const e = ch.effects;
+    [ch.date, ch.title || ch.pid, ch.type, ch.what,
+     e['7'].text, e['14'].text, e['30'].text,
+     (ch.rankBefore || '—') + ' → ' + (ch.rankNow || '—')]
+      .forEach(v => tr.appendChild(el('td','',esc(v))));
+    tb.appendChild(tr);
+  }
+  t.appendChild(tb);
+  const stats = (AN && AN.changeStats) || [];
+  st.appendChild(el('h4','','Накоплено по типам правок (T+7)'));
+  if (!stats.length) {
+    st.appendChild(el('div','empty','Пока ни одной правки с полными 7 днями до и после. ' +
+      'Как наберётся — здесь появится медиана эффекта по каждому типу правки.'));
+    return;
+  }
+  const t2 = el('table','mini'), th2 = el('thead'), tr2 = el('tr');
+  for (const h of ['Тип правки','Замеров','Медиана','Мин','Макс']) tr2.appendChild(el('th','',h));
+  th2.appendChild(tr2); t2.appendChild(th2);
+  const tb2 = el('tbody');
+  const pct = v => v === null || v === undefined ? '—' : (v > 0 ? '+' : MINUS) + Math.abs(v).toFixed(0) + '%';
+  for (const s of stats) {
+    const tr = el('tr');
+    [s.type, s.n, pct(s.median), pct(s.min), pct(s.max)].forEach(v => tr.appendChild(el('td','',String(v))));
+    tb2.appendChild(tr);
+  }
+  t2.appendChild(tb2); st.appendChild(t2);
+}
+
+/* ---------- trend chart ---------- */
+const METRIC = { units:{lbl:'Шт', get:v=>v.u, fmt:fmtI}, revenue:{lbl:'Выручка', get:v=>v.r, fmt:fmtMoney},
+                 profit:{lbl:'Прибыль', get:v=>v.p, fmt:fmtMoney} };
+let lastTrendW = 0;                       // ширина, под которую посчитан текущий viewBox
+function renderTrend(rows) {
+  const m = METRIC[S.metric];
+  const days = [];
+  for (let i = S.period - 1; i >= 0; i--) {
+    const date = addDays(anchor, -i);
+    let u=0, r=0, p=0, o=0, c=0;
+    for (const row of rows) { const v = (sales[row.c.pid] || {})[date];
+      if (v) { u+=v.u; r+=v.r; p+=v.p; o+=v.o; c+=v.c; } }
+    days.push({ date, u, r, p, o, c });
+  }
+  $('trendTitle').textContent = m.lbl === 'Шт' ? 'Продажи по дням, шт' : m.lbl + ' по дням';
+  $('trendSvg').setAttribute('aria-label', $('trendTitle').textContent);
+  $('trendNote').textContent = 'Сумма по ' + rows.length + ' отфильтрованным карточкам · без отменённых';
+  const svg = $('trendSvg');
+  lastTrendW = svg.parentNode.clientWidth;
+  const W = Math.max(320, lastTrendW), H = 220,
+        padL = S.metric === 'units' ? 46 : 74, padR = 8, padT = 10, padB = 26;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.style.height = H + 'px';
+  svg.textContent = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  const add = (parent, tag, attrs) => { const n = document.createElementNS(ns, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]); parent.appendChild(n); return n; };
+  const vals = days.map(d => m.get(d));
+  const nice = v => { const p = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const s of [1,2,2.5,5,10]) if (s*p >= v) return s*p; return 10*p; };
+  const niceMax = nice(Math.max(1, ...vals));
+  const lo = Math.min(0, ...vals);                    // убыточные дни — ниже нуля, а не «пусто»
+  const niceMin = lo < 0 ? -nice(-lo) : 0;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const y = v => padT + plotH * (niceMax - v) / (niceMax - niceMin);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  for (let g = 0; g <= 4; g++) {                                   // сетка + тики
+    const val = niceMin + (niceMax - niceMin) * g / 4, yy = y(val);
+    add(svg, 'line', { x1:padL, x2:W-padR, y1:yy, y2:yy, stroke:css('--grid'), 'stroke-width':1 });
+    const t = add(svg, 'text', { x:padL-7, y:yy+4, 'text-anchor':'end', fill:css('--muted'),
+      'font-size':10.5, 'font-family':'inherit' });
+    t.textContent = S.metric === 'units' ? fmtI(val) : fmtMoney(val);
+  }
+  add(svg, 'line', { x1:padL, x2:W-padR, y1:y(0), y2:y(0), stroke:css('--axis'), 'stroke-width':1 });
+  const slot = plotW / days.length, bw = Math.min(24, Math.max(3, slot - 2));
+  // подписи X: шаг по доступной ширине (метка «01.07» ≈ 30px + воздух), последняя — всегда
+  const step = Math.max(1, Math.ceil(38 / slot));
+  const lastLabelled = days.length - 1 - ((days.length - 1) % step);
+  days.forEach((d, i) => {
+    const v = m.get(d), x = padL + slot*i + (slot-bw)/2, yy = y(v);
+    const h = y(0) - yy;
+    if (h > 0.5)                                  // положительный столбец: скруглён сверху
+      add(svg, 'path', { d: roundTop(x, yy, bw, h, Math.min(4, bw/2, h)), fill:css('--s1') });
+    else if (h < -0.5)                            // убыток: вниз от нуля, скруглён снизу
+      add(svg, 'path', { d: roundBottom(x, y(0), bw, -h, Math.min(4, bw/2, -h)), fill:css('--crit') });
+    const isLast = i === days.length - 1;
+    // не рисуем «плановую» метку, если сразу за ней встанет обязательная последняя
+    const show = isLast || (i % step === 0 && !(i === lastLabelled && lastLabelled !== days.length - 1
+      && (days.length - 1 - i) * slot < 38));
+    if (show) {
+      const t = add(svg, 'text', { x:x+bw/2, y:H-8, 'text-anchor':'middle', fill:css('--muted'),
+        'font-size':10.5, 'font-family':'inherit' });
+      t.textContent = fmtDate(d.date);
+    }
+  });
+  const cross = add(svg, 'line', { y1:padT, y2:y(0), stroke:css('--axis'),
+    'stroke-width':1, visibility:'hidden' });
+  const tip = $('tooltip');
+  svg.onpointermove = e => {
+    const r = svg.getBoundingClientRect();
+    const vx = (e.clientX - r.left) * (W / r.width);          // px экрана → координаты viewBox
+    const i = Math.min(days.length - 1, Math.max(0, Math.floor((vx - padL) / slot)));
+    const d = days[i]; if (!d) return;
+    const cx = padL + slot*i + slot/2;
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx);
+    cross.setAttribute('visibility', 'visible');
+    tip.textContent = '';
+    tip.appendChild(el('div', 'tt-title', fmtDate(d.date)));
+    tip.appendChild(el('div', 'tt-val', m.fmt(m.get(d)) + (S.metric === 'units' ? ' шт' : ' сум')));
+    tip.appendChild(el('div', 'tt-sub', 'заказов: ' + d.o + (d.c ? ' · отмен: ' + d.c : '')));
+    tip.style.display = 'block';
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.max(8, Math.min(window.innerWidth - tw - 12, e.clientX + 14)) + 'px';
+    tip.style.top = (e.clientY + 14 + th > window.innerHeight    // не уезжать за нижний край
+      ? Math.max(8, e.clientY - th - 14) : e.clientY + 14) + 'px';
+  };
+  svg.onpointerleave = () => { cross.setAttribute('visibility','hidden'); tip.style.display='none'; };
+  renderTrendTable(days);
+}
+/* таблица-двойник: те же значения без наведения (график ничего не «запирает» в тултипе) */
+function renderTrendTable(days) {
+  const t = $('trendTbl'); t.textContent = '';
+  const thead = el('thead'), trh = el('tr');
+  for (const h of ['Дата','Шт','Выручка, сум','Прибыль, сум','Заказов','Отмен'])
+    trh.appendChild(el('th', '', h));
+  thead.appendChild(trh); t.appendChild(thead);
+  const tb = el('tbody');
+  for (const d of [...days].reverse()) {
+    const tr = el('tr');
+    [fmtDate(d.date), fmtI(d.u), fmtI(d.r), fmtI(d.p), fmtI(d.o), d.c ? fmtI(d.c) : '—']
+      .forEach(v => tr.appendChild(el('td', '', v)));
+    tb.appendChild(tr);
+  }
+  const tot = el('tr');
+  ['Итого', fmtI(days.reduce((s,d)=>s+d.u,0)), fmtI(days.reduce((s,d)=>s+d.r,0)),
+   fmtI(days.reduce((s,d)=>s+d.p,0)), fmtI(days.reduce((s,d)=>s+d.o,0)),
+   fmtI(days.reduce((s,d)=>s+d.c,0))].forEach(v => {
+    const td = el('td', '', v); td.style.fontWeight = '650'; tot.appendChild(td); });
+  tb.appendChild(tot);
+  t.appendChild(tb);
+}
+function roundTop(x, y, w, h, r) {
+  return 'M' + x + ' ' + (y+h) + ' L' + x + ' ' + (y+r) + ' Q' + x + ' ' + y + ' ' + (x+r) + ' ' + y +
+    ' L' + (x+w-r) + ' ' + y + ' Q' + (x+w) + ' ' + y + ' ' + (x+w) + ' ' + (y+r) +
+    ' L' + (x+w) + ' ' + (y+h) + ' Z';
+}
+function roundBottom(x, y0, w, h, r) {            // столбец вниз от базовой линии y0
+  return 'M' + x + ' ' + y0 + ' L' + x + ' ' + (y0+h-r) + ' Q' + x + ' ' + (y0+h) + ' ' + (x+r) + ' ' + (y0+h) +
+    ' L' + (x+w-r) + ' ' + (y0+h) + ' Q' + (x+w) + ' ' + (y0+h) + ' ' + (x+w) + ' ' + (y0+h-r) +
+    ' L' + (x+w) + ' ' + y0 + ' Z';
+}
+
+/* ---------- sparkline (14 дн, шт) ---------- */
+function sparkSvg(pid) {
+  const n = 14, w = 66, h = 20, bw = 3;
+  const vals = [];
+  for (let i = n-1; i >= 0; i--) {
+    const v = (sales[pid] || {})[addDays(anchor, -i)];
+    vals.push(v ? v.u : 0);
+  }
+  const max = Math.max(1, ...vals);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', w); svg.setAttribute('height', h); svg.classList.add('spark');
+  vals.forEach((v, i) => {
+    const bh = v === 0 ? 1.5 : Math.max(2, h * v / max);
+    const rect = document.createElementNS(ns, 'rect');
+    rect.setAttribute('x', i * (bw + 2)); rect.setAttribute('y', h - bh);
+    rect.setAttribute('width', bw); rect.setAttribute('height', bh);
+    rect.setAttribute('fill', i === vals.length - 1 ? 'var(--s1)' : 'var(--s1-soft)');
+    if (v === 0) rect.setAttribute('opacity', '.35');
+    svg.appendChild(rect);
+  });
+  return svg;
+}
+
+/* ---------- table ---------- */
+const COLS = [
+  { key:'title', lbl:'Товар', l:true, val:r=>r.c.title },
+  { key:'rank',  lbl:'Ранг',  val:r=>r.c.rank || '—' },
+  { key:'price', lbl:'Цена',  val:r=>r.c.price, fmt:fmtI },
+  { key:'stock', lbl:'Остаток', val:r=>r.c.stock },
+  { key:'sdays', lbl:'Дней ост.', val:r=>r.a.stockDays },
+  { key:'spark', lbl:'14 дн', sortable:false },
+  { key:'u',     lbl:'Шт', val:r=>r.a.cur.u },
+  { key:'du',    lbl:'Δ шт', val:r=>r.a.prev ? r.a.cur.u - r.a.prev.u : null },
+  { key:'rev',   lbl:'Выручка', val:r=>r.a.cur.r, fmt:fmtI },
+  { key:'prof',  lbl:'Прибыль', val:r=>r.a.cur.p, fmt:fmtI },
+  { key:'prize', lbl:'Приз, сум/нед', val:r=>{ const m = anCard(r.c.pid); return m ? m.prizeMoney : null; } },
+  { key:'ret',   lbl:'Возвр.%', val:r=>r.c.ret_pct },
+  { key:'view',  lbl:'Просм.', val:r=>r.c.viewers },
+  { key:'conv',  lbl:'Конв.%', val:r=>r.c.conv },
+  { key:'rate',  lbl:'Рейтинг', val:r=>r.c.rating },
+  { key:'sig',   lbl:'Сигнал / действие', l:true, sortable:false },
+];
+function renderTable(rows) {
+  $('tblNote').textContent = 'Шт / выручка / прибыль — за ' + S.period +
+    ' дн. Сигнал показывает динамику карточки, «Что делать» выше — узкое место и размер разрыва: ' +
+    'растущая карточка тоже может недобирать. Клик по строке — детали, по заголовку — сортировка.';
+  const head = $('tblHead'); head.textContent = '';
+  for (const col of COLS) {
+    const th = el('th', col.l ? 'l' : '', col.lbl + ' ');
+    if (col.sortable !== false) {
+      if (S.sort.key === col.key) th.appendChild(el('span', 'arr', S.sort.dir < 0 ? '↓' : '↑'));
+      const sortBy = () => {
+        S.sort = { key: col.key, dir: S.sort.key === col.key ? -S.sort.dir : -1 };
+        renderAll();
+        const again = [...$('tblHead').children].find(x => x.textContent.startsWith(col.lbl));
+        if (again) again.focus();                       // фокус переживает перерисовку
+      };
+      th.tabIndex = 0; th.setAttribute('role', 'columnheader');
+      th.addEventListener('click', sortBy);
+      th.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(); } });
+      th.setAttribute('aria-sort', S.sort.key === col.key ?
+        (S.sort.dir < 0 ? 'descending' : 'ascending') : 'none');
+    } else th.style.cursor = 'default';
+    head.appendChild(th);
+  }
+  const col = COLS.find(c => c.key === S.sort.key);
+  if (col && col.val) rows.sort((a, b) => {
+    const va = col.val(a), vb = col.val(b);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1; if (vb == null) return -1;
+    return (typeof va === 'string' ? va.localeCompare(vb, 'ru') : va - vb) * S.sort.dir;
+  });
+  const body = $('tblBody'); body.textContent = '';
+  for (const r of rows) {
+    const tr = el('tr'); tr.tabIndex = 0;
+    const open = () => openDrawer(r);
+    tr.addEventListener('click', open);
+    tr.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+
+    const tdT = el('td', 'l');
+    const nm = el('div', 'tname', r.c.title); nm.title = r.c.title;
+    tdT.appendChild(nm); tdT.appendChild(el('div', 'tcat', r.c.category));
+    tr.appendChild(tdT);
+
+    const tdR = el('td'); tdR.appendChild(el('span', 'rank ' + esc(r.c.rank), r.c.rank || '—'));
+    tr.appendChild(tdR);
+    tr.appendChild(el('td', '', fmtI(r.c.price)));
+    tr.appendChild(el('td', '', fmtI(r.c.stock)));
+    tr.appendChild(el('td', '', r.a.stockDays === null ? '—' : String(r.a.stockDays)));
+    const tdS = el('td'); tdS.appendChild(sparkSvg(r.c.pid)); tr.appendChild(tdS);
+    tr.appendChild(el('td', '', fmtI(r.a.cur.u)));
+    const du = r.a.prev ? r.a.cur.u - r.a.prev.u : null;
+    tr.appendChild(el('td', du === null ? '' : du > 0 ? 'dpos' : du < 0 ? 'dneg' : '',
+      du === null ? 'н/д' : (du > 0 ? '+' : '') + sign(du)));
+    tr.appendChild(el('td', '', fmtI(r.a.cur.r)));
+    tr.appendChild(el('td', '', fmtI(r.a.cur.p)));
+    const mA = anCard(r.c.pid);
+    tr.appendChild(el('td', '', mA && mA.prizeMoney ? fmtMoney(mA.prizeMoney) : '—'));
+    tr.appendChild(el('td', '', r.c.ret_pct === null ? '—' : r.c.ret_pct + '%'));
+    tr.appendChild(el('td', '', fmtI(r.c.viewers)));
+    tr.appendChild(el('td', '', r.c.conv === null ? '—' : String(r.c.conv)));
+    tr.appendChild(el('td', '', (r.c.rating || '—') + ' (' + r.c.reviews + ')'));
+    const tdSig = el('td', 'l');
+    tdSig.appendChild(el('span', 'sig ' + r.sig.cls, r.sig.icon + ' ' + r.sig.txt));
+    tr.appendChild(tdSig);
+    body.appendChild(tr);
+  }
+}
+
+/* ---------- drawer ---------- */
+function miniChart(pid, metric, days) {
+  const w = 480, h = 110, padL = 56, padB = 18, padT = 6;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  svg.style.width = '100%'; svg.style.display = 'block';
+  const vals = [];
+  for (let i = days-1; i >= 0; i--) {
+    const d = addDays(anchor, -i), v = (sales[pid] || {})[d];
+    vals.push({ d, v: v ? metric.get(v) : 0 });
+  }
+  const max = Math.max(1, ...vals.map(x => x.v));
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const plotH = h - padT - padB, slot = (w - padL - 4) / vals.length,
+        bw = Math.min(10, Math.max(2, slot - 2));
+  const add = (tag, attrs) => { const n = document.createElementNS(ns, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]); svg.appendChild(n); return n; };
+  add('line', { x1:padL, x2:w-4, y1:padT+plotH, y2:padT+plotH, stroke:css('--axis'), 'stroke-width':1 });
+  const t0 = add('text', { x:padL-6, y:padT+9, 'text-anchor':'end', fill:css('--muted'), 'font-size':9.5 });
+  t0.textContent = metric.fmt(max);
+  vals.forEach((x, i) => {
+    if (x.v <= 0) return;
+    const bh = plotH * x.v / max;
+    add('path', { d: roundTop(padL + slot*i + (slot-bw)/2, padT + plotH - bh, bw, bh,
+      Math.min(2, bw/2, bh)), fill: css('--s1') });   // скругление только сверху, низ на оси
+  });
+  [0, Math.floor(vals.length/2), vals.length-1].forEach(i => {
+    const t = add('text', { x: padL + slot*i + slot/2, y: h-4, 'text-anchor':'middle',
+      fill: css('--muted'), 'font-size':9.5 });
+    t.textContent = fmtDate(vals[i].d);
+  });
+  return svg;
+}
+let openRow = null;                        // текущая карточка в панели — для перерисовки по теме
+function openDrawer(r) {
+  openRow = r;
+  const c = r.c, b = $('dBody'); b.textContent = '';
+  b.appendChild(el('h3', '', c.title));
+  b.appendChild(el('div', 'dcat', c.category + ' · ID ' + c.pid + ' · SKU: ' + c.skus));
+  const sig = el('div', 'dsig', r.sig.icon + ' ' + r.sig.txt);
+  b.appendChild(sig);
+  const grid = el('div', 'dgrid');
+  const cells = [
+    ['Ранг', c.rank || '—'], ['Цена', fmtI(c.price) + ' сум'], ['Остаток', c.stock],
+    ['Дней остатка', r.a.stockDays === null ? '—' : r.a.stockDays],
+    ['Шт за ' + S.period + ' дн', r.a.cur.u],
+    ['Выручка', fmtMoney(r.a.cur.r) + ' сум'], ['Прибыль', fmtMoney(r.a.cur.p) + ' сум'],
+    ['Заказов', r.a.cur.o + (r.a.cur.c ? ' (+' + r.a.cur.c + ' отм.)' : '')],
+    ['Продано всего', c.sold], ['Возвраты', c.ret_pct === null ? '—' : c.ret_pct + '%'],
+    ['Просмотры', fmtI(c.viewers)], ['Конверсия', c.conv === null ? '—' : c.conv + '%'],
+    ['Рейтинг', (c.rating || '—') + ' (' + c.reviews + ')'],
+    ['ROI', (v => v === null ? '—' : sign(v.toLocaleString('ru-RU', {maximumFractionDigits:1})) + '%')(
+      (x => isNaN(x) ? null : x)(parseFloat(c.roi)))],
+    ['Статус', c.status], ['Модерация', c.moderation],
+  ];
+  for (const [k, v] of cells) {
+    const cell = el('div', 'dcell');
+    cell.appendChild(el('div', 'k', k)); cell.appendChild(el('div', 'v', String(v)));
+    grid.appendChild(cell);
+  }
+  b.appendChild(grid);
+
+  const m = anCard(c.pid);
+  if (m) {
+    b.appendChild(el('h4', '', 'Воронка и разрыв'));
+    const fg = el('div', 'funnel');
+    const per = m.convSrc === 'period';
+    const gap = (m.conv !== null && m.bench) ? m.conv - m.bench : null;
+    const steps = [
+      { k: per ? 'Просмотры за ' + m.windowDays + ' дн' : 'Просмотры за всё время',
+        v: fmtI(per ? (m.views || 0) : (m.viewsEval || 0)),
+        s: per ? 'с ' + fmtDate(m.trafficFrom) : 'накопительный счётчик' },
+      { k:'Заказы / шт', v: m.o + ' / ' + m.u, s:'за ' + S.period + ' дн' },
+      { k:'Конверсия', v: m.conv === null ? '—' : m.conv.toFixed(2), s:'шт на 100 просмотров' },
+      { k:'Норма', v: m.bench === null || m.bench === undefined ? '—' : m.bench.toFixed(2),
+        s: m.benchSrc || 'мало данных' },
+      { k:'Разрыв', v: gap === null ? '—' : (gap >= 0 ? '+' : MINUS) + Math.abs(gap).toFixed(2),
+        s: gap === null ? '' : (gap < 0 ? 'ниже нормы' : 'выше нормы'), gap: gap !== null && gap < 0 },
+      { k:'Приз', v: m.prizeMoney ? fmtMoney(m.prizeMoney) : '—',
+        s: m.prizeUnits ? '≈ ' + m.prizeUnits.toFixed(1) + ' шт/нед · ' + m.conf : 'уверенность: ' + m.conf },
+    ];
+    for (const st of steps) {
+      const d = el('div', 'fstep' + (st.gap ? ' gap' : ''));
+      d.appendChild(el('div','k',st.k)); d.appendChild(el('div','v',st.v));
+      d.appendChild(el('div','s',st.s));
+      fg.appendChild(d);
+    }
+    b.appendChild(fg);
+    // все задачи карточки, а не только главный диагноз: иначе панель показывает один приз,
+    // а очередь по той же карточке — другой (например, дозаказ против конверсии)
+    const P = curP();
+    const mine = P ? P.tasks.filter(t => t.pid === c.pid) : [];
+    b.appendChild(el('h4', '', mine.length > 1 ? 'Что сделать (' + mine.length + ')' : 'Что сделать'));
+    for (const t of mine) {
+      const act = el('div', 'dsig');
+      act.appendChild(el('div','', t.diag));
+      const strong = el('div',''); strong.style.fontWeight = '600'; strong.style.marginTop = '4px';
+      strong.textContent = t.action;
+      act.appendChild(strong);
+      if (t.prizeMoney) {
+        const p = el('div','', 'приз ' + fmtMoney(t.prizeMoney) + ' сум/нед · ≈ ' +
+          t.prizeUnits.toFixed(1) + ' шт/нед · уверенность: ' + t.conf);
+        p.style.color = 'var(--muted)'; p.style.fontSize = '11.5px'; p.style.marginTop = '4px';
+        act.appendChild(p);
+      }
+      b.appendChild(act);
+    }
+    const own = ((AN && AN.changes) || []).filter(ch => ch.pid === c.pid);
+    if (own.length) {
+      b.appendChild(el('h4','','Правки по этой карточке'));
+      const t = el('table','mini'), th = el('thead'), trh = el('tr');
+      for (const h of ['Дата','Тип','Что изменили','T+7','T+14']) trh.appendChild(el('th','',h));
+      th.appendChild(trh); t.appendChild(th);
+      const tb = el('tbody');
+      for (const ch of own) {
+        const tr = el('tr');
+        [ch.date, ch.type, ch.what, ch.effects['7'].text, ch.effects['14'].text]
+          .forEach(v => tr.appendChild(el('td','',esc(v))));
+        tb.appendChild(tr);
+      }
+      t.appendChild(tb); b.appendChild(t);
+    }
+  }
+
+  const histDays = Math.min(35, availDays);
+  b.appendChild(el('h4', '', 'Продажи по дням, шт (' + histDays + ' дн)'));
+  b.appendChild(miniChart(c.pid, METRIC.units, histDays));
+  b.appendChild(el('h4', '', 'Выручка по дням (' + histDays + ' дн)'));
+  b.appendChild(miniChart(c.pid, METRIC.revenue, histDays));
+
+  b.appendChild(el('h4', '', 'История метрик (лог снимков)'));
+  const hist = (logByPid[c.pid] || []).slice(-14).reverse();
+  if (hist.length > 1) {
+    const t = el('table', 'mini'), thead = el('thead'), trh = el('tr');
+    for (const h of ['Дата','Ранг','Цена','Остаток','Продано','Просм.','Конв.%']) trh.appendChild(el('th','',h));
+    thead.appendChild(trh); t.appendChild(thead);
+    const tb = el('tbody');
+    for (const h of hist) {
+      const tr = el('tr');
+      [fmtDate(h.date), h.rank || '—', fmtI(h.price), h.stock, h.sold, h.viewers,
+       h.conv === null ? '—' : h.conv].forEach(v => tr.appendChild(el('td','',String(v))));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb); b.appendChild(t);
+  } else b.appendChild(el('div','empty','Лог накапливается — история появится через несколько дней.'));
+
+  b.appendChild(el('h4', '', 'Позиции по ключам (ручной срез)'));
+  const keys = keysByPid[c.pid] || [];
+  if (keys.length) {
+    const t = el('table', 'mini'), thead = el('thead'), trh = el('tr');
+    for (const h of ['Дата','Ключ','Позиция','Охват','Примечание']) trh.appendChild(el('th','',h));
+    thead.appendChild(trh); t.appendChild(thead);
+    const tb = el('tbody');
+    for (const kr of keys) {
+      const tr = el('tr');
+      [kr.date, kr.key, kr.pos, kr.reach, kr.note].forEach(v => tr.appendChild(el('td','',esc(v))));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb); b.appendChild(t);
+  } else b.appendChild(el('div','empty',
+    'Среза нет. Позиции по ключам снимаются еженедельно вручную (капча на витрине) → keys_manual.csv.'));
+
+  $('overlay').style.display = 'block';
+  $('drawer').classList.add('open');
+}
+function closeDrawer() { openRow = null;
+  $('overlay').style.display='none'; $('drawer').classList.remove('open'); }
+$('overlay').addEventListener('click', closeDrawer);
+$('dClose').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+/* ---------- controls ---------- */
+$('periodSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.period = +b.dataset.p;
+  for (const x of $('periodSeg').children) x.setAttribute('aria-pressed', String(x === b));
+  renderAll();
+});
+$('metricSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.metric = b.dataset.m;
+  for (const x of $('metricSeg').children) x.setAttribute('aria-pressed', String(x === b));
+  renderAll();
+});
+$('actMore').addEventListener('click', () => { S.actAll = !S.actAll; renderActions(lastRows); });
+let qT; $('search').addEventListener('input', e => {
+  clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value; renderAll(); }, 150);
+});
+// ResizeObserver, а не window.resize: ловит и изменение самого контейнера
+// (открытие панели, полосы прокрутки, зум) — иначе viewBox расходится с реальной шириной.
+// Перерисовка на следующем кадре, без задержки: viewBox шире/уже реальной ширины
+// заставляет SVG отмасштабировать и отцентрировать график — заметно как «схлопнулся».
+(() => { let pending = false;
+  const redraw = () => { if (pending) return; pending = true;
+    requestAnimationFrame(() => { pending = false;
+      const w = $('trendWrap').clientWidth;
+      if (w && Math.abs(w - lastTrendW) > 1) renderAll(); }); };
+  if (window.ResizeObserver) new ResizeObserver(redraw).observe($('trendWrap'));
+  window.addEventListener('resize', redraw);
+})();
+
+/* ---------- main ---------- */
+let lastRows = [];                        // последний отфильтрованный набор — для «Показать все»
+function renderAll() {
+  const rowsAll = DATA.cards.map(c => { const a = cardAgg(c, S.period);
+    return { c, a, sig: signal(c, a) }; })
+    .filter(r => { const q = S.q.trim().toLowerCase();
+      return !q || (r.c.title + ' ' + r.c.category + ' ' + r.c.pid).toLowerCase().includes(q); });
+  renderChips(rowsAll);
+  const rows = rowsAll.filter(r => S.sig === 'all' || r.sig.bucket === S.sig);
+  lastRows = rows;
+  renderKpis(rows);
+  renderFunnel(rows);
+  renderActions(rows);
+  renderTrend(rows);
+  renderTable(rows);
+  renderChanges();
+  if (openRow) {                       // панель открыта — пересобрать её в текущей теме/периоде
+    const fresh = rowsAll.find(r => r.c.pid === openRow.c.pid);
+    if (fresh) openDrawer(fresh); else closeDrawer();
+  }
+}
+document.querySelector('header.top h1').textContent =
+  'Uzum · ' + (DATA.shopTitle || DATA.shops.join(', ')) + ' — карточки';
+$('genInfo').textContent = 'снимок ' + anchor + ' · сформировано ' + DATA.generated;
+renderAll();
+</script>
+</body>
+</html>
